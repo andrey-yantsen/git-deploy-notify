@@ -1,5 +1,6 @@
 Установка:
+0. Добавить в capistrano хук after deploy:restart - capistrano.deploy-hook
 1. Скопировать содержимое репозитория в .git/hooks
-2. Исправить конфигурацию
+2. Копировать файл notify.config.sample в notify.config; исправить параметры
 3. ???
 4. Profit!
