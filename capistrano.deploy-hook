@@ -1,0 +1,11 @@
+namespace :git do
+  desc "Place release tag into Git and push it to server."
+  task :push_deploy_tag do
+    user = `git config --get user.name`.strip
+    email = `git config --get user.email`.strip
+    version = `git cat-file -p #{real_revision}:configs.ini | fgrep runtime.version | awk -F '[ =]+' '{print $2}'`.strip
+    version_rev = real_revision[0, 7]
+    puts `git tag v#{version}-#{stage}-#{version_rev} #{real_revision} -m "Deployed by #{user} <#{email}>"`
+    puts `git push --tags`
+  end
+end

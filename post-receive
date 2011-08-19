@@ -1,0 +1,110 @@
+#!/bin/bash
+
+config="`dirname $0`/notify.config"
+if ! [ -s $config ]
+then
+    echo "Отсутствует конфигурационный файл '$config'"
+    exit 1
+fi
+
+. $config
+
+if [ -z "$PROJECT_NAME" ] || [ -z "$MAIL_TO" ] || [ -z "$JIRA_HOST" ]
+then
+    echo 'В конфиге необходимо заполнить переменные PROJECT_NAME, MAIL_TO и JIRA_HOST'
+    exit 1
+fi
+
+while read oldrev newrev refname
+do
+    rev_type=$(git cat-file -t $newrev 2>/dev/null)
+
+    case "$refname","$rev_type" in
+        refs/tags/*,tag)
+            rev_range=""
+            tag=${refname##refs/tags/}
+
+            version=`echo $tag | cut -d- -f1`
+            server=`echo $tag | cut -d- -f2`
+
+            if [ -z "$version" ] || [ -z "$server" ]
+            then
+                echo 'Некорректный формат тега. Требуется: <version>-<server>-<revision>'
+                exit 2
+            fi
+
+            subject="$PROJECT_NAME версии $version"
+
+            prevtag=$(git describe --tags --abbrev=0 --match="*-$server-*" $newrev^ 2>/dev/null)
+            if ! [ -z "$prevtag" ]
+            then
+                oldversion=`echo $prevtag | cut -d- -f1`
+                if [ "$version" != "$oldversion" ]
+                then
+                    subject="$subject установлен"
+                else
+                    subject="$subject обновлён"
+                fi
+                rev_range="$prevtag..$newrev"
+            else
+                subject="$subject установлен"
+            fi
+
+            subject="$subject на сервере '$server'"
+            msg=/tmp/releasemail.$RANDOM
+            tmp=/tmp/commitlog.$RANDOM
+            tickets=/tmp/ticketslog.$RANDOM
+            eval $(git for-each-ref --shell --format='
+              tagger=%(taggername)
+              tagged=%(taggerdate)' $refname
+            )
+
+            if [ -z "$rev_range" ]
+            then
+                echo "$tagger впервые провёл установку проекта на сервер '$server', информация о различиях пока отсутствует." > $msg
+            else
+                echo "$tagger выложил следующие обновления на сервер '$server':" > $msg
+                echo >>$msg
+
+                git log $rev_range --abbrev-commit --pretty="format:%s" > $tmp
+                php >$tickets <<END
+<?php
+\$f = file_get_contents("$tmp");
+if (preg_match_all("#([A-Z.]+-\d+)#", \$f, \$matches)) {
+    \$matches[1] = array_unique(\$matches[1]);
+    foreach (\$matches[1] as \$match) {
+        echo '$JIRA_HOST/browse/', \$match, PHP_EOL;
+    }
+}
+END
+                rm $tmp
+
+                if [ -s $tickets ]
+                then
+                    echo "Коммиты по задачам:" >>$msg
+                    cat $tickets | sort -u >>$msg
+                    echo >>$msg
+                fi
+
+                rm $tickets
+
+                echo "Полный список коммитов с предыдущего обновления:" >> $msg
+                git log $rev_range --no-merges --abbrev-commit --pretty="format:%h %ad %an / %s" >> $msg
+
+                echo -e "\n\nИзменения по файлам:" >>$msg
+                git diff --stat=140,110 $rev_range >>$msg
+            fi
+
+            echo -e "\n-- \nПисьмо сгенерировано автоматически после создания тега '$tag'\nС любовью, ваш git">>$msg
+
+            if ! [ -z "$COPY_TO" ]
+            then
+                MAIL_TO="-c $COPY_TO $MAIL_TO"
+            fi
+
+            cat $msg | mail -s "$subject" $MAIL_TO
+
+            rm $msg
+        ;;
+    esac
+done

@@ -1,0 +1,4 @@
+PROJECT_NAME="Мега проект"
+MAIL_TO="dev@yandex.ru"
+COPY_TO="qa@yandex.ru"
+JIRA_HOST="http://jira.local"
