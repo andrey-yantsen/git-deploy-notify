@@ -70,7 +70,7 @@ do
                 php >$tickets <<END
 <?php
 \$f = file_get_contents("$tmp");
-if (preg_match_all("#([A-Z.]+-\d+)#", \$f, \$matches)) {
+if (preg_match_all("#([A-Z._-]+-\d+)#", \$f, \$matches)) {
     \$matches[1] = array_unique(\$matches[1]);
     foreach (\$matches[1] as \$match) {
         echo '$JIRA_HOST/browse/', \$match, PHP_EOL;
